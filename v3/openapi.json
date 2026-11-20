@@ -1,0 +1,820 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "ediFabric Cloud API",
+    "version": "3.0",
+    "description": "REST API for X12 and HIPAA 5010. Parse translates an X12 file to JSON and, in the same call, validates it up to HIPAA SNIP level 4 and generates a 999, 997 or TA1 acknowledgment. Build translates the JSON back to X12. For EDIFACT, HL7, NCPDP and VDA, use v2.\n\n**Authentication.** Send your serial key in the `Ocp-Apim-Subscription-Key` header. To try the API without an account, use the demo serial key `bd96a836feca45cb91c86ee65d281f52`. It has a small daily quota. When it runs out, [sign up free for Community](https://www.edifabric.com/pricing.html) and use your own serial key.\n\n**Quota.** Each Parse or Build call is one operation, in every mode. When the plan's quota is used up, the API returns 403.\n\n**Models.** The JSON property names of each transaction come from its model. See the [EDI spec library](https://www.edifabric.com/specs/index.html) for each model and its OpenEDI template.\n\n**Offline.** To run the same operations inside your own network, see the ediFabric Native examples for [Azure Functions](https://github.com/EdiFabric/API.Azure), [AWS Lambda](https://github.com/EdiFabric/API.AWS) and [ASP.NET Core](https://github.com/EdiFabric/API.ASPNET).",
+    "termsOfService": "https://www.edifabric.com/files/eula.pdf",
+    "contact": {
+      "name": "ediFabric support",
+      "url": "https://www.edifabric.com/support.html",
+      "email": "support@edifabric.com"
+    }
+  },
+  "externalDocs": {
+    "description": "ediFabric Cloud documentation",
+    "url": "https://www.edifabric.com/docs/edifabric-cloud/introduction.html"
+  },
+  "servers": [
+    {
+      "url": "https://api.edination.com/v3",
+      "description": "ediFabric Cloud"
+    },
+    {
+      "url": "https://api-{id}.edination.com/v3",
+      "description": "Enterprise dedicated host",
+      "variables": {
+        "id": {
+          "default": "id",
+          "description": "The host id assigned with the Enterprise plan."
+        }
+      }
+    }
+  ],
+  "security": [
+    {
+      "ApiKey": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "X12",
+      "description": "Parse and build X12 and HIPAA files.",
+      "externalDocs": {
+        "url": "https://www.edifabric.com/docs/edifabric-cloud/x12-operations.html"
+      }
+    }
+  ],
+  "paths": {
+    "/x12/parse": {
+      "post": {
+        "tags": [
+          "X12"
+        ],
+        "operationId": "x12Parse",
+        "summary": "Parse X12",
+        "description": "Translates an X12 file to JSON and, depending on `mode`, validates it and generates a 999, 997 or TA1 acknowledgment, in one call. Each call is one operation in every mode.\n\n| Mode | Response |\n|---|---|\n| `1` or `Json` | `application/json`: an array of X12Interchange objects. `X-EdiFabric-Offset` is 0. |\n| `2` or `JsonValidate` | `application/octet-stream`: the same array, followed by a ValidationReport. |\n| `3` or `JsonValidateAck` | `application/octet-stream`: the same array, followed by a ValidationReport with the acknowledgment in `ack`. |\n\nIn modes 2 and 3 the body is two JSON documents back to back, so it is not valid JSON as a whole. Split it at the byte offset in the `X-EdiFabric-Offset` header: the bytes before it are the array of X12Interchange, and the bytes from it onwards are the ValidationReport.",
+        "externalDocs": {
+          "url": "https://www.edifabric.com/docs/edifabric-cloud/x12-operations.html#parse-x12"
+        },
+        "parameters": [
+          {
+            "name": "mode",
+            "in": "query",
+            "description": "What to return: `1` (`Json`), `2` (`JsonValidate`) or `3` (`JsonValidateAck`), as the number or the name. The default is 1.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "2",
+                "3",
+                "Json",
+                "JsonValidate",
+                "JsonValidateAck"
+              ],
+              "default": "1"
+            }
+          },
+          {
+            "name": "charSet",
+            "in": "query",
+            "description": "The encoding of the X12 file. The default is utf-8.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "utf-8",
+                "utf-16",
+                "unicodeFFFE",
+                "utf-32",
+                "utf-32BE",
+                "us-ascii",
+                "iso-8859-1"
+              ],
+              "default": "utf-8"
+            }
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "description": "The model to use, by its identifier, for example `EdiNation.X12.HIPAA.005010`, or the name of a custom model that you manage in the EDI Spec Builder. By default, the API infers the model from the transaction and version identifiers. The identifier is case-sensitive. The model applies to every transaction in the request, so it must contain each transaction and version in the file. The `Model` property of each transaction shows which model was used.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "config",
+            "in": "query",
+            "description": "The validation and acknowledgment options, as URL-escaped JSON in the shape of ParseConfig. All sections and properties are optional. `validate` applies in modes 2 and 3, and `ack` in mode 3.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "{\"validate\":{\"snip_level\":4},\"ack\":{\"gen997\":false}}"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "A raw X12 file, as binary. Up to 5 MB. Multipart form data and JSON are not supported.",
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              },
+              "example": "ISA*00*          *00*          *ZZ*1234567        *ZZ*11111          *170508*1141*^*00501*000000101*1*P*:~GS*HC*XXXXXXX*XXXXX*20170617*1741*101*X*005010X222A1~ST*837*0021*005010X222A1~...~SE*42*0021~GE*1*101~IEA*1*000000101~"
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success. Validation errors in the file are returned in the ValidationReport, not as an HTTP error.",
+            "headers": {
+              "X-EdiFabric-Offset": {
+                "description": "The byte offset where the ValidationReport starts in the body. 0 in mode 1.",
+                "schema": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/X12Interchange"
+                  }
+                },
+                "example": [
+                  {
+                    "SegmentDelimiter": "~",
+                    "DataElementDelimiter": "*",
+                    "ISA": {
+                      "AuthorizationInformationQualifier_1": "00",
+                      "AuthorizationInformation_2": "          ",
+                      "SecurityInformationQualifier_3": "00",
+                      "SecurityInformation_4": "          ",
+                      "SenderIDQualifier_5": "ZZ",
+                      "InterchangeSenderID_6": "1234567        ",
+                      "ReceiverIDQualifier_7": "ZZ",
+                      "InterchangeReceiverID_8": "11111          ",
+                      "InterchangeDate_9": "170508",
+                      "InterchangeTime_10": "1141",
+                      "InterchangeControlStandardsIdentifier_11": "^",
+                      "InterchangeControlVersionNumber_12": "00501",
+                      "InterchangeControlNumber_13": "000000101",
+                      "AcknowledgementRequested_14": "1",
+                      "UsageIndicator_15": "P",
+                      "ComponentElementSeparator_16": ":"
+                    },
+                    "Groups": [
+                      {
+                        "GS": {
+                          "CodeIdentifyingInformationType_1": "HC",
+                          "SenderIDCode_2": "XXXXXXX",
+                          "ReceiverIDCode_3": "XXXXX",
+                          "Date_4": "20170617",
+                          "Time_5": "1741",
+                          "GroupControlNumber_6": "101",
+                          "TransactionTypeCode_7": "X",
+                          "VersionAndRelease_8": "005010X222A1"
+                        },
+                        "Transactions": [
+                          {
+                            "ST": {
+                              "TransactionSetIdentifierCode_01": "837",
+                              "TransactionSetControlNumber_02": "0021",
+                              "ImplementationConventionPreference_03": "005010X222A1"
+                            },
+                            "SE": {
+                              "NumberofIncludedSegments_01": "42",
+                              "TransactionSetControlNumber_02": "0021"
+                            },
+                            "Model": "EdiNation.X12.HIPAA.005010"
+                          }
+                        ],
+                        "GE": {
+                          "NumberOfIncludedSets_1": "1",
+                          "GroupControlNumber_2": "101"
+                        }
+                      }
+                    ],
+                    "IEA": {
+                      "NumberOfIncludedGroups_1": "1",
+                      "InterchangeControlNumber_2": "000000101"
+                    }
+                  }
+                ]
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Modes 2 and 3: an array of X12Interchange, followed by a ValidationReport at the byte offset in `X-EdiFabric-Offset`."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is empty, or `mode`, `config` or `charSet` is invalid, or the model or a transaction in the file can't be found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "500": {
+            "description": "The file could not be translated, for example `parse: error 429: Can't find ISA segment`, or something went wrong on our end.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/x12/build": {
+      "post": {
+        "tags": [
+          "X12"
+        ],
+        "operationId": "x12Build",
+        "summary": "Build X12",
+        "description": "Translates X12Interchange JSON, in the v3 format, to a raw X12 file. Build writes the segments in the JSON as they are and does not add missing trailers, so include `SE`, `GE` and `IEA` with the correct counts. The output is UTF-8 without a byte order mark.",
+        "externalDocs": {
+          "url": "https://www.edifabric.com/docs/edifabric-cloud/x12-operations.html#build-x12"
+        },
+        "parameters": [
+          {
+            "name": "postfix",
+            "in": "query",
+            "description": "The text to write after each segment terminator, URL-escaped. For example `%0D%0A` puts each segment on its own line. By default, there is none.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "\r\n"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "An array of X12Interchange objects in the v3 format. A single X12Interchange object is also accepted. Up to 50 MB.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/X12Interchange"
+                }
+              },
+              "example": [
+                {
+                  "SegmentDelimiter": "~",
+                  "DataElementDelimiter": "*",
+                  "ISA": {
+                    "AuthorizationInformationQualifier_1": "00",
+                    "AuthorizationInformation_2": "          ",
+                    "SecurityInformationQualifier_3": "00",
+                    "SecurityInformation_4": "          ",
+                    "SenderIDQualifier_5": "ZZ",
+                    "InterchangeSenderID_6": "1234567        ",
+                    "ReceiverIDQualifier_7": "ZZ",
+                    "InterchangeReceiverID_8": "11111          ",
+                    "InterchangeDate_9": "170508",
+                    "InterchangeTime_10": "1141",
+                    "InterchangeControlStandardsIdentifier_11": "^",
+                    "InterchangeControlVersionNumber_12": "00501",
+                    "InterchangeControlNumber_13": "000000101",
+                    "AcknowledgementRequested_14": "1",
+                    "UsageIndicator_15": "P",
+                    "ComponentElementSeparator_16": ":"
+                  },
+                  "Groups": [
+                    {
+                      "GS": {
+                        "CodeIdentifyingInformationType_1": "HC",
+                        "SenderIDCode_2": "XXXXXXX",
+                        "ReceiverIDCode_3": "XXXXX",
+                        "Date_4": "20170617",
+                        "Time_5": "1741",
+                        "GroupControlNumber_6": "101",
+                        "TransactionTypeCode_7": "X",
+                        "VersionAndRelease_8": "005010X222A1"
+                      },
+                      "Transactions": [
+                        {
+                          "ST": {
+                            "TransactionSetIdentifierCode_01": "837",
+                            "TransactionSetControlNumber_02": "0021",
+                            "ImplementationConventionPreference_03": "005010X222A1"
+                          },
+                          "SE": {
+                            "NumberofIncludedSegments_01": "42",
+                            "TransactionSetControlNumber_02": "0021"
+                          },
+                          "Model": "EdiNation.X12.HIPAA.005010"
+                        }
+                      ],
+                      "GE": {
+                        "NumberOfIncludedSets_1": "1",
+                        "GroupControlNumber_2": "101"
+                      }
+                    }
+                  ],
+                  "IEA": {
+                    "NumberOfIncludedGroups_1": "1",
+                    "InterchangeControlNumber_2": "000000101"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The X12 file.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "example": "ISA*00*          *00*          *ZZ*1234567        *ZZ*11111          *170508*1141*^*00501*000000101*1*P*:~GS*HC*XXXXXXX*XXXXX*20170617*1741*101*X*005010X222A1~ST*837*0021*005010X222A1~...~SE*42*0021~GE*1*101~IEA*1*000000101~"
+              }
+            }
+          },
+          "400": {
+            "description": "The body is empty.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "500": {
+            "description": "The JSON is invalid, including v2 JSON with `GETrailers` or `IEATrailers`, for example `build: error 637: Invalid JSON`, or something went wrong on our end.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Ocp-Apim-Subscription-Key",
+        "description": "Your serial key. The demo serial key `bd96a836feca45cb91c86ee65d281f52` works without an account and has a small daily quota."
+      }
+    },
+    "schemas": {
+      "X12Interchange": {
+        "type": "object",
+        "description": "An X12 interchange, the ISA/IEA envelope, in the v3 format. v3 has single `GE` and `IEA` objects instead of the v2 `GETrailers` and `IEATrailers` arrays, and no `TA1` or `Result`.",
+        "required": [
+          "SegmentDelimiter",
+          "DataElementDelimiter",
+          "ISA",
+          "Groups",
+          "IEA"
+        ],
+        "properties": {
+          "SegmentDelimiter": {
+            "type": "string",
+            "description": "The segment terminator."
+          },
+          "DataElementDelimiter": {
+            "type": "string",
+            "description": "The data element separator, the character at position 4 of the ISA segment."
+          },
+          "ISA": {
+            "$ref": "#/components/schemas/ISA"
+          },
+          "Groups": {
+            "type": "array",
+            "description": "The functional groups.",
+            "items": {
+              "$ref": "#/components/schemas/X12Group"
+            }
+          },
+          "IEA": {
+            "$ref": "#/components/schemas/IEA"
+          }
+        }
+      },
+      "X12Group": {
+        "type": "object",
+        "description": "A functional group, the GS/GE envelope, in the v3 format.",
+        "required": [
+          "GS",
+          "Transactions",
+          "GE"
+        ],
+        "properties": {
+          "GS": {
+            "$ref": "#/components/schemas/GS"
+          },
+          "Transactions": {
+            "type": "array",
+            "description": "The transaction sets.",
+            "items": {
+              "$ref": "#/components/schemas/X12Transaction"
+            }
+          },
+          "GE": {
+            "$ref": "#/components/schemas/GE"
+          }
+        }
+      },
+      "X12Transaction": {
+        "type": "object",
+        "description": "A transaction set. Apart from `Model`, the property names come from the transaction's model, for example `ST`, `BHT_BeginningOfHierarchicalTransaction` and `Loop2000A` in an 837P. Each model and its OpenEDI template are in the EDI spec library at https://www.edifabric.com/specs/index.html.",
+        "properties": {
+          "Model": {
+            "type": "string",
+            "description": "The model that was used to parse the transaction. Optional when building.",
+            "example": "EdiNation.X12.HIPAA.005010"
+          }
+        },
+        "additionalProperties": true
+      },
+      "ISA": {
+        "type": "object",
+        "properties": {
+          "AuthorizationInformationQualifier_1": {
+            "type": "string",
+            "nullable": true
+          },
+          "AuthorizationInformation_2": {
+            "type": "string",
+            "nullable": true
+          },
+          "SecurityInformationQualifier_3": {
+            "type": "string",
+            "nullable": true
+          },
+          "SecurityInformation_4": {
+            "type": "string",
+            "nullable": true
+          },
+          "SenderIDQualifier_5": {
+            "type": "string",
+            "nullable": true
+          },
+          "InterchangeSenderID_6": {
+            "type": "string",
+            "nullable": true
+          },
+          "ReceiverIDQualifier_7": {
+            "type": "string",
+            "nullable": true
+          },
+          "InterchangeReceiverID_8": {
+            "type": "string",
+            "nullable": true
+          },
+          "InterchangeDate_9": {
+            "type": "string",
+            "nullable": true
+          },
+          "InterchangeTime_10": {
+            "type": "string",
+            "nullable": true
+          },
+          "InterchangeControlStandardsIdentifier_11": {
+            "type": "string",
+            "nullable": true
+          },
+          "InterchangeControlVersionNumber_12": {
+            "type": "string",
+            "nullable": true
+          },
+          "InterchangeControlNumber_13": {
+            "type": "string",
+            "nullable": true
+          },
+          "AcknowledgementRequested_14": {
+            "type": "string",
+            "nullable": true
+          },
+          "UsageIndicator_15": {
+            "type": "string",
+            "nullable": true
+          },
+          "ComponentElementSeparator_16": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "GS": {
+        "type": "object",
+        "properties": {
+          "CodeIdentifyingInformationType_1": {
+            "type": "string",
+            "nullable": true
+          },
+          "SenderIDCode_2": {
+            "type": "string",
+            "nullable": true
+          },
+          "ReceiverIDCode_3": {
+            "type": "string",
+            "nullable": true
+          },
+          "Date_4": {
+            "type": "string",
+            "nullable": true
+          },
+          "Time_5": {
+            "type": "string",
+            "nullable": true
+          },
+          "GroupControlNumber_6": {
+            "type": "string",
+            "nullable": true
+          },
+          "TransactionTypeCode_7": {
+            "type": "string",
+            "nullable": true
+          },
+          "VersionAndRelease_8": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "GE": {
+        "type": "object",
+        "properties": {
+          "NumberOfIncludedSets_1": {
+            "type": "string",
+            "nullable": true
+          },
+          "GroupControlNumber_2": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "IEA": {
+        "type": "object",
+        "properties": {
+          "NumberOfIncludedGroups_1": {
+            "type": "string",
+            "nullable": true
+          },
+          "InterchangeControlNumber_2": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ValidationReport": {
+        "type": "object",
+        "description": "The second part of the Parse response in modes 2 and 3. Its property names are in lower case with underscores.",
+        "properties": {
+          "errors": {
+            "type": "array",
+            "description": "The validation errors. Empty when the file is valid.",
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            }
+          },
+          "errors_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The number of errors."
+          },
+          "data_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The number of segments."
+          },
+          "ack": {
+            "type": "string",
+            "description": "Mode 3 only. The acknowledgment as raw X12: a 999 by default or a 997 on request, with a TA1 if the interchange asks for one."
+          }
+        },
+        "example": {
+          "errors": [
+            {
+              "index": 25,
+              "element_index": 0,
+              "composite_index": 0,
+              "repetition_index": 0,
+              "code": 204,
+              "message": "Number of included segments does not match actual count"
+            }
+          ],
+          "errors_count": 1,
+          "data_count": 27,
+          "ack": "ISA*00*          *00*          *ZZ*11111          *ZZ*1234567        *261103*1034*^*00501*000000001*0*P*:~..."
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The position of the segment in the file."
+          },
+          "element_index": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The position of the data element in the segment."
+          },
+          "composite_index": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The position of the component in a composite data element."
+          },
+          "repetition_index": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The repetition of the data element."
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The error code."
+          },
+          "message": {
+            "type": "string",
+            "description": "The error message."
+          }
+        }
+      },
+      "ParseConfig": {
+        "type": "object",
+        "description": "The options for the `config` parameter of Parse, sent as URL-escaped JSON.",
+        "properties": {
+          "validate": {
+            "$ref": "#/components/schemas/ValidateConfig"
+          },
+          "ack": {
+            "$ref": "#/components/schemas/AckConfig"
+          }
+        }
+      },
+      "ValidateConfig": {
+        "type": "object",
+        "description": "Validation options. They apply in modes 2 and 3.",
+        "properties": {
+          "snip_level": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1,
+            "maximum": 4,
+            "default": 2,
+            "description": "The validation level: 1 syntax only, 2 limits and codes, 3 balancing, 4 inter-segment."
+          },
+          "max_errors": {
+            "type": "integer",
+            "format": "int32",
+            "default": 100,
+            "description": "The maximum number of errors to report."
+          },
+          "regex": {
+            "type": "string",
+            "nullable": true,
+            "description": "A regular expression that alphanumeric data elements must match. By default, no syntax set is applied."
+          },
+          "date_format": {
+            "type": "string",
+            "nullable": true,
+            "description": "The date pattern to validate against, for example `yyyyMMdd`. By default, 6-digit dates use `yyMMdd` and 8-digit dates use `yyyyMMdd`."
+          },
+          "time_format": {
+            "type": "string",
+            "nullable": true,
+            "description": "The time pattern to validate against. By default, the pattern follows the length of the value."
+          },
+          "skip_seq_count": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether to skip validating sequence numbers that the model defines."
+          },
+          "skip_hl_seq": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether to skip validating that HL segments are numbered in sequence."
+          }
+        }
+      },
+      "AckConfig": {
+        "type": "object",
+        "description": "Acknowledgment options. They apply in mode 3. The spelling of `supress_ta1` and `ak901_p` is intentional.",
+        "properties": {
+          "gen997": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether to generate a 997 instead of a 999."
+          },
+          "gen_for_valid": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether to include acknowledgment loops for valid transactions as well."
+          },
+          "supress_ta1": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether to suppress the TA1 that ISA14 asks for."
+          },
+          "ak901_p": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether to set AK901 to P when only some transactions are accepted."
+          }
+        }
+      },
+      "ErrorDetails": {
+        "type": "object",
+        "properties": {
+          "Code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "Details": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The error body. `Code` is the HTTP status code and `Details` has the reasons."
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "The `Ocp-Apim-Subscription-Key` header is missing or the key is invalid."
+      },
+      "Forbidden": {
+        "description": "The plan's operation quota is used up. On Community, that is the shared daily quota."
+      },
+      "TooLarge": {
+        "description": "The request body is over the limit: 5 MB for Parse, 50 MB for Build.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorDetails"
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "The `Content-Type` is wrong. Parse takes only `application/octet-stream`, and Build only `application/json`.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorDetails"
+            }
+          }
+        }
+      }
+    }
+  }
+}
